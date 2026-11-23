@@ -15,7 +15,11 @@ e会学 是 Vue2 单页应用，学习进度全部挂在页面 Vue 实例的 `$d
 | 拉卷面 | `GET /index/study/quizscore?eid=&seid=` |
 | 交卷 | `POST /index/study/examsheet` |
 
-所以视频不需要真的播放，练习也不需要真的点——但答案要你自己提供（见下）。
+所以视频不需要真的播放。题目则交给大模型现场作答——**不靠写死的答案表**，因为
+e会学 每次进卷都会重排题号和选项顺序，`{qid: "A"}` 这种表换个快照就会答错题。
+
+模型答案按「题干 + 选项内容」的指纹缓存（`.ehx-answers.json`），同一道题第二次
+出现不再重复请求，重排也不影响命中。
 
 ## 准备浏览器
 
@@ -48,24 +52,31 @@ pip install playwright
 ```bash
 python ehx.py --cid 43390 state          # 课程结构 + 进度
 python ehx.py --cid 43390 video          # 刷完视频
-python ehx.py --cid 43390 quiz --dry-run # 抓卷 + 对答案，不提交
-python ehx.py --cid 43390 quiz           # 交卷
+python ehx.py --cid 43390 quiz --dry-run --show   # 抓卷 + 解题，打印看看
+python ehx.py --cid 43390 quiz           # 解题并交卷
 python ehx.py --cid 43390 progress       # 总进度 / 平均分
 python ehx.py --cid 43390 all            # 视频 + 练习 + 考试
 ```
 
 `--cid` 在课程页 URL 的 `?cid=` 后面。`--port` 默认 9222。
 
-## 答案表
+## 答案是怎么来的
 
-`ehx/answers.py` 里存的是**特定课程**的答案，按题目 `qid` 索引：
+默认用大模型逐题作答（`ehx/solver.py`）：
 
-- `PRACTISE`：34 套练习
-- `EXAM`：1 套考试（40 题）
+```bash
+export EHUEXUE_API_KEY=sk-...        # 或 DEEPSEEK_API_KEY
+# 也可以每次传：--api-key sk-...
+python ehx.py --cid 43390 quiz --dry-run --show
+```
 
-换课程（cid 变了）这张表就失效。先用 `quiz --dry-run` 看它报哪些 `missing`，
-再按题目把答案补进去。**没有答案的题会拿兜底值（单选 A、判断 1）交上去**，
-所以看到 missing 就要停下来补，不要直接提交。
+`--show` 会把每道题的题干和模型给的答案打出来，先看一遍再决定交不交。
+
+- 单选题返回一个字母，多选题返回 `A,C`，判断题返回 `1`（正确）/`2`（错误）。
+- 缓存文件 `.ehx-answers.json` 已在 `.gitignore` 里，属于本地产物。
+- 嫌模型慢或想省钱，可以 `--solver table` 退回 `ehx/answers.py` 里那份 2026-10 的旧表——
+  但**那张表只对应那一次的快照**，题号重排后基本不可用，只适合复核历史记录。
+- 想换模型：`--model` 和 `--base` 都支持 OpenAI 兼容接口。
 
 ## 输出长什么样
 
@@ -84,10 +95,12 @@ ehx/browser.py      接管调试浏览器
 ehx/dom.py          页面里执行的 JS 片段
 ehx/state.py        导出节点树与进度
 ehx/video.py        刷视频
-ehx/quiz.py         抓卷 / 对答案 / 交卷
+ehx/quiz.py         抓卷 / 组卷 / 交卷
+ehx/solver.py       调大模型解题（按内容指纹缓存）
 ehx/parse_quiz.py   卷面 HTML 解析
-ehx/answers.py      答案表（课程相关）
+ehx/answers.py      旧答案表（--solver table 时才用）
 ehx/progress.py     读进度
+tests/              离线单元测试，不需要浏览器和网络
 docs/交接文档.md     接口细节、数据模型、当初怎么试出来的
 ```
 
@@ -95,5 +108,6 @@ docs/交接文档.md     接口细节、数据模型、当初怎么试出来的
 
 - 视频被锁（前面没看完 / 未到开放时间）时刷不动，脚本会反复 reload 直到轮数用尽。
 - 同一份卷子重复提交会覆盖成绩，别反复跑 `quiz`。
+- 解题要联网调模型；没有 key 且缓存为空时会直接报错，不会静默提交兜底值。
 - 只处理单选、多选、判断三类客观题；填空/主观题不在解析范围内（`parse_quiz` 只解析 `input` 选项）。
 - Windows 控制台输出中文如果乱码，`set PYTHONIOENCODING=utf-8` 再跑。

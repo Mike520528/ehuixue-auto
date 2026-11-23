@@ -10,3 +10,4 @@ plan.json
 seids.json
 quiz_*.html
 *.log
+.ehx-answers.json

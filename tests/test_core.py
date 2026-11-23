@@ -108,7 +108,7 @@ class TestBuildPlan(unittest.TestCase):
         self.assertEqual(plan["1002"]["ans"]["246499"]["ans"], "A")   # 单选 → A
         self.assertEqual(plan["1002"]["ans"]["246500"]["ans"], "A")   # 多选 → A
         self.assertEqual(plan["1002"]["ans"]["246501"]["ans"], "1")   # 判断 → 1
-        self.assertTrue(any("没有答案" in line for line in logs))
+        self.assertTrue(any("没拿到答案" in line for line in logs))
 
     def test_考试卷用EXAM表(self):
         import ehx.quiz as quiz_mod

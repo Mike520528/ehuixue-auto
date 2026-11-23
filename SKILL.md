@@ -28,13 +28,16 @@ description: 自动完成 e会学（ehuixue.cn）网课的视频学习与练习/
 
 4. 依赖：`pip install playwright`（不需要 `playwright install`，因为我们接管现成的浏览器）。
 
+5. **解题要模型 key**：`export EHUEXUE_API_KEY=sk-...`（或 `DEEPSEEK_API_KEY`）。
+   没有 key 时视频照样能刷，但练习/考试会在解题阶段直接报错退出，不会瞎交。
+
 ## 怎么跑
 
 ```bash
 python ehx.py --cid 43390 state        # 先看：多少视频、已完成多少、练习考试各几份
 python ehx.py --cid 43390 video        # 刷视频
-python ehx.py --cid 43390 quiz --dry-run   # 抓卷对答案，不提交（先看有没有漏答案）
-python ehx.py --cid 43390 quiz         # 交卷
+python ehx.py --cid 43390 quiz --dry-run --show   # 抓卷 + 解题，打印题干和答案
+python ehx.py --cid 43390 quiz         # 解题并交卷
 python ehx.py --cid 43390 progress     # 看总进度/平均分
 python ehx.py --cid 43390 all          # 一条龙
 ```
@@ -49,15 +52,24 @@ python ehx.py --cid 43390 all          # 一条龙
 - `练习均分 80.x`、`考试均分 88.x`（不同课程不同）
 - `已交练习 34 已交考试 1`
 
-视频没刷满就先跑 `video` 再跑 `quiz`；`quiz` 在 `--dry-run` 阶段如果打印
-「有 N 道题在答案表里没有答案」，说明 `ehx/answers.py` 缺这几题，得先补上，
-否则会拿兜底值（单选 A / 判断 1）交上去，分数会很难看。
+视频没刷满就先跑 `video` 再跑 `quiz`。`quiz --dry-run --show` 里如果看到
+「缺 <eid> qid=...」就说明模型这几题没答出来，先解决（换模型 / 检查 key / 看题干是否被翻译污染），
+不要硬提交。
 
-## 答案表
+## 答案怎么来
 
-`ehx/answers.py` 里是**特定课程**的答案：`PRACTISE` 按 qid 索引 34 套练习，
-`EXAM` 是一份考试（40 题）。换课程（cid 变了）这份表就失效，要重新抓卷子重新核对。
-抓卷可以在 `quiz --dry-run` 的输出里看，也可以直接改 `build_plan` 把 `missing` 打全。
+**不要写死答案表。** e会学 每次进卷会重排题号和选项顺序，`{qid: "A"}` 这种表
+换个快照就会答错题。默认路线是让模型现场答（`ehx/solver.py`）：
+
+```bash
+export EHUEXUE_API_KEY=sk-...     # 或 DEEPSEEK_API_KEY；也可 --api-key 传
+python ehx.py --cid 43390 quiz --dry-run --show
+```
+
+- 模型答案按「题干 + 选项内容」的指纹缓存在 `.ehx-answers.json`，重排不影响命中。
+- 先 `--dry-run --show` 看答案，确认没问题再加 `quiz` 真提交。
+- `--solver table` 才走 `ehx/answers.py` 的老表，那是 2026-10 某次快照的产物，只留作复核。
+- 模型漏答的题不会静默用兜底值——日志会逐条列出 `缺 <eid> qid=... `，看到就要处理。
 
 ## 数据结构速查（改代码时看）
 
