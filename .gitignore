@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 运行时产物：每次跑都会重新生成，而且含你的账号数据
+state.json
+papers.json
+plan.json
+seids.json
+quiz_*.html
+*.log

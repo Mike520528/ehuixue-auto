@@ -1,0 +1,115 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""e会学课程自动化命令行入口。
+
+    python ehx.py state            # 看课程结构和进度
+    python ehx.py video            # 刷完所有视频
+    python ehx.py quiz --dry-run   # 只抓卷对答案，不提交
+    python ehx.py quiz             # 提交练习 + 考试
+    python ehx.py progress         # 看总进度
+    python ehx.py all              # 视频 + 练习 + 考试
+
+前置条件：浏览器用 --remote-debugging-port=9222 启动，且已经在这个浏览器里登录过 ehuiuxue.cn。
+"""
+
+import argparse
+import json
+import sys
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+from ehx.browser import cdp_page, is_logged_in, DEFAULT_PORT
+from ehx.progress import read_progress
+from ehx.quiz import DEFAULT_EXAM_EIDS, build_plan, grab_papers, submit_plan
+from ehx.state import snapshot, summarize
+from ehx.video import run_video
+
+
+def build_parser():
+    p = argparse.ArgumentParser(description="e会学课程自动化：刷视频 + 刷练习/考试")
+    p.add_argument("--port", type=int, default=DEFAULT_PORT, help="调试端口，默认 9222")
+    p.add_argument("--cid", required=True, help="课程 id，例如 43390")
+    p.add_argument("--json", action="store_true", help="输出原始 JSON 而不是摘要")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("state", help="导出课程节点树与进度")
+    v = sub.add_parser("video", help="刷完所有视频")
+    v.add_argument("--max-rounds", type=int, default=200)
+
+    q = sub.add_parser("quiz", help="抓卷 → 对答案 → 交卷")
+    q.add_argument("--dry-run", action="store_true", help="只抓卷和对答案，不提交")
+    q.add_argument("--exam-eid", action="append", default=None, help="哪张卷算考试，可重复，默认 473305")
+
+    sub.add_parser("progress", help="只看进度")
+
+    a = sub.add_parser("all", help="视频 + 练习 + 考试一条龙")
+    a.add_argument("--max-rounds", type=int, default=200)
+    a.add_argument("--exam-eid", action="append", default=None)
+    return p
+
+
+def dump(obj):
+    print(json.dumps(obj, ensure_ascii=False, indent=1))
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    exam_eids = tuple(args.exam_eid) if getattr(args, "exam_eid", None) else DEFAULT_EXAM_EIDS
+
+    with cdp_page(port=args.port, cid=args.cid) as page:
+        if not is_logged_in(page):
+            raise SystemExit("课程页没加载出来（Vue 上没有 partinfo）：先在这个浏览器里登录并打开课程页")
+
+        if args.cmd == "state":
+            st = snapshot(page)
+            dump(st) if args.json else print(summarize(st))
+
+        elif args.cmd == "progress":
+            st = read_progress(page, cid=args.cid)
+            dump(st) if args.json else print(summarize(snapshot(page)))
+
+        elif args.cmd == "video":
+            res = run_video(page, max_rounds=args.max_rounds)
+            print(summarize(snapshot(page)))
+            if res["exhausted"]:
+                print("注意：还有未完成的视频（被锁或上报失败），跑第二轮或检查是否到了开放时间")
+            dump(res) if args.json else None
+
+        elif args.cmd == "quiz":
+            st = snapshot(page)
+            eids = [p["about_id"] for p in st["practises"]] + [e["about_id"] for e in st["exams"]]
+            print("练习 {} 个，考试 {} 个".format(len(st["practises"]), len(st["exams"])))
+            papers = grab_papers(page, eids)
+            plan = build_plan(papers, exam_eids=exam_eids)
+            total_q = sum(len(v["ans"]) for v in plan.values())
+            print("卷子 {} 张，共 {} 题".format(len(plan), total_q))
+            if args.json:
+                dump({"papers": {k: {kk: vv for kk, vv in v.items() if kk != "html"} for k, v in papers.items()},
+                      "plan_size": {k: len(v["ans"]) for k, v in plan.items()}})
+            if args.dry_run:
+                print("dry-run：没有提交")
+                return 0
+            results = submit_plan(page, plan, exam_eids=exam_eids)
+            bad = [k for k, v in results.items() if not v["ok"]]
+            print("提交完成：成功 {} / 失败 {}".format(len(results) - len(bad), len(bad)))
+            if bad:
+                print("失败：", ", ".join(map(str, bad)))
+                return 1
+            print(summarize(snapshot(page)))
+
+        elif args.cmd == "all":
+            print("=== 刷视频 ===")
+            run_video(page, max_rounds=args.max_rounds)
+            print(summarize(snapshot(page)))
+            print("=== 刷练习/考试 ===")
+            st = snapshot(page)
+            eids = [p["about_id"] for p in st["practises"]] + [e["about_id"] for e in st["exams"]]
+            plan = build_plan(grab_papers(page, eids), exam_eids=exam_eids)
+            submit_plan(page, plan, exam_eids=exam_eids)
+            print(summarize(snapshot(page)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
