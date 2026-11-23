@@ -131,7 +131,25 @@ def run_quiz(page, args, exam_eids, dry_run):
 
 
 def main(argv=None):
+    from ehx.browser import BrowserError
+    from ehx.solver import SolverError
+    from ehx.state import StateError
+
     args = build_parser().parse_args(argv)
+    try:
+        return _main(args)
+    except BrowserError as exc:
+        print("浏览器错误：{}".format(exc))
+        return 2
+    except StateError as exc:
+        print("读不到课程数据：{}".format(exc))
+        return 2
+    except SolverError as exc:
+        print("解题失败：{}".format(exc))
+        return 2
+
+
+def _main(args):
     exam_eids = tuple(args.exam_eid) if getattr(args, "exam_eid", None) else DEFAULT_EXAM_EIDS
 
     with cdp_page(port=args.port, cid=args.cid) as page:
