@@ -47,6 +47,31 @@ pip install playwright
 
 不需要 `playwright install`——我们连的是你现成的浏览器，不是自己起的。
 
+## 给其他 agent 用
+
+仓库根目录本身就是一份 skill：`SKILL.md` 说明什么时候用、前置条件、命令表和数据模型，
+`ehx.py` 是可直接执行的入口。三种接法：
+
+```bash
+# 1) 塞进 agent 的 skills 目录（Claude Code / Codex / DSH 都认这个位置）
+git clone https://github.com/Mike520528/ehuixue-auto.git ~/.agents/skills/ehuixue-auto
+
+# 2) 只是临时用一下，clone 到任意目录，读 SKILL.md 照着跑
+git clone https://github.com/Mike520528/ehuixue-auto.git && cd ehuixue-auto
+
+# 3) 作为子模块挂进别的项目
+git submodule add https://github.com/Mike520528/ehuixue-auto.git tools/ehuixue-auto
+```
+
+**这个仓库是私有的**，别的机器上先 `gh auth login` 让 git 拿到凭据，或者
+`git clone https://<token>@github.com/Mike520528/ehuixue-auto.git`。
+
+给 agent 的原话可以很短：
+
+> 照 `ehuixue-auto/SKILL.md` 把 `--cid 43390` 这门课的视频刷完、练习和考试做完。
+
+agent 自己会去读前置条件（调试端口、登录态、`EHUEXUE_API_KEY`）。
+
 ## 用法
 
 ```bash

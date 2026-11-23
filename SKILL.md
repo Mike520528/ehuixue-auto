@@ -1,6 +1,6 @@
 ---
 name: ehuixue-auto
-description: 自动完成 e会学（ehuixue.cn）网课的视频学习与练习/考试。视频通过上报 study_recording 让服务端判定完成，不需要真的播放；练习与考试通过 joinquiz → quizscore 抓卷、按 qid 答案表作答、examsheet 交卷。用于「这门 e会学 网课帮我刷/挂完/做完」的请求，需要在用户自己已登录的调试浏览器里跑。
+description: 自动完成 e会学（ehuixue.cn）网课的视频学习与练习/考试。视频通过上报 study_recording 让服务端判定完成，不需要真的播放；练习与考试通过 joinquiz → quizscore 抓卷、交给大模型现场解题（按「题干+选项」指纹缓存，不依赖会重排的题号答案表）、examsheet 交卷。用于「这门 e会学 网课帮我刷/挂完/做完」的请求，需要在用户自己已登录的调试浏览器里跑。
 ---
 
 # e会学 课程自动化
